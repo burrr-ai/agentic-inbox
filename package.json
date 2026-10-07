@@ -5,17 +5,24 @@
 	"type": "module",
 	"cloudflare": {
 		"label": "Agentic Inbox",
-		"products": ["Workers", "Durable Objects", "R2", "Workers AI"],
+		"products": [
+			"Workers",
+			"Durable Objects",
+			"R2",
+			"Workers AI"
+		],
 		"bindings": {
 			"DOMAINS": {
-				"description": "Your domain with [Email Routing](https://developers.cloudflare.com/email-routing/) enabled (e.g. `example.com`). After deploying, create a catch-all Email Routing rule pointing to this Worker."
+				"description": "Your domain with [Email Routing](https://developers.cloudflare.com/email-routing/) enabled (e.g. `example.com`). Keep existing forwarding rules until test delivery and cutover are approved."
 			}
 		}
 	},
 	"scripts": {
 		"build": "react-router build",
 		"cf-typegen": "wrangler types",
-		"deploy": "npm run build && wrangler deploy",
+		"deploy": "npm run build && node scripts/wrangler.mjs deploy",
+		"cf": "node scripts/wrangler.mjs",
+		"auth:bootstrap": "node scripts/bootstrap-admin.mjs",
 		"dev": "react-router dev",
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
@@ -37,6 +44,7 @@
 		"@tiptap/starter-kit": "3.20.2",
 		"agents": "^0.7.6",
 		"ai": "^6.0.116",
+		"better-auth": "^1.7.7",
 		"dompurify": "^3.3.3",
 		"drizzle-orm": "^0.45.1",
 		"hono": "^4.7.11",

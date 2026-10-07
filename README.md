@@ -12,28 +12,36 @@ An **AI-powered Email Agent** can read your inbox, search conversations, and dra
 
 Read the blog post to learn more about Cloudflare Email Service and how to use it with the Agents SDK, MCP, and from the Wrangler CLI: [Email for Agents](https://blog.cloudflare.com/email-for-agents/).
 
-## How to setup
+## Clovair deployment
 
-**Important**: Clicking the 'Deploy to Cloudflare' button is only one part of the setup. You must follow the **After deploying** steps as well. For a full step-by-step guide with screenshots, refer to this comment: 
-https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
+This fork uses Better Auth email/password login instead of Cloudflare Access.
+The web app is configured for `https://mails.clovair.dev`. All authenticated team
+members can access every mailbox. Only administrators can create login accounts
+from **팀원 관리**. Public signup is disabled. Password changes are available in
+**내 계정**; login sessions last up to 30 days and can be ended with logout.
 
-### To set up
+Deployment uses Wrangler and `wrangler.jsonc`, not `cf deploy`. Run commands through
+`npm run cf -- ...` to use this directory's OAuth login and the pinned Clovair account,
+without inheriting the global Cloudflare API token or API proxy.
 
-1. Deploy to Cloudflare. The deploy flow will automatically provision R2, Durable Objects, and Workers AI. You'll be prompted for **DOMAINS**, which is the domain (yourdomain.com) you want to receive emails for (email@yourdomain.com).
+```bash
+npm ci
+npm run cf -- whoami
+npm run cf -- d1 migrations apply AUTH_DB --remote
+npm run auth:bootstrap -- --remote
+npm run deploy
+```
 
-     [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/agentic-inbox)
+The bootstrap command privately prompts for the initial administrator password,
+stores only a Better Auth password hash, and does not reset an existing account.
+Set `BETTER_AUTH_SECRET` as a Worker secret and `BETTER_AUTH_URL` to the HTTPS app
+origin. Local development requires a separate ignored `.dev.vars` with these two
+values (`BETTER_AUTH_URL=http://localhost:5173`) and local D1 migrations.
 
-2. **Configure Cloudflare Access** -- Enable [one-click Cloudflare Access](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/) on your Worker under Settings > Domains & Routes. The modal will show your `POLICY_AUD` and `TEAM_DOMAIN` values. `TEAM_DOMAIN` can be either your Access team URL or the full `.../cdn-cgi/access/certs` URL. **You must set these as secrets for your Worker.**
-3. **Set up Email Routing** -- In the Cloudflare dashboard, go to your domain > Email Routing and create a catch-all rule that forwards to this Worker
-4. **Enable Email Service** -- The worker needs the `send_email` binding to send outbound emails. See [Email Service docs](https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/)
-5. **Create a mailbox** -- Visit your deployed app and create a mailbox for any address on your domain (e.g. `hello@example.com`)
-
-### Troubleshooting Access
-
-1. If you see `Invalid or expired Access token`, that usually means `POLICY_AUD` or `TEAM_DOMAIN` secrets are incorrect.
-   * Resolution: [turn Access off and back on for the Worker to get the Access modal again](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/), then reset your Worker secrets to the latest `POLICY_AUD` and `TEAM_DOMAIN` values shown there.
-2. If you see `Cloudflare Access must be configured in production`, this application is intentionally enforcing Cloudflare Access so your inbox is not exposed to anyone on the internet.
-   * Resolution: enable Access using [one-click Cloudflare Access for Workers](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/), then set the `POLICY_AUD` and `TEAM_DOMAIN` Worker secrets from the modal values.
+Do **not** enable catch-all or replace existing Gmail routing during app deployment.
+Provision the four configured mailboxes first. Once a test address is approved and
+verified, present the individual rule changes for approval before switching delivery.
+See [operations and recovery](docs/OPERATIONS.md) for the rollout and backup procedure.
 
 ## Features
 
@@ -49,7 +57,7 @@ https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
 - **Frontend:** React 19, React Router v7, Tailwind CSS, Zustand, TipTap, `@cloudflare/kumo`
 - **Backend:** Hono, Cloudflare Workers, Durable Objects (SQLite), R2, Email Routing
 - **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, Workers AI (`@cf/moonshotai/kimi-k2.5`), `react-markdown` + `remark-gfm`
-- **Auth:** Cloudflare Access JWT validation (required outside local development)
+- **Auth:** Better Auth, private email/password accounts, D1 sessions, administrator-only account creation
 
 ## Getting Started
 
@@ -123,9 +131,13 @@ npm run deploy
 - [Email Routing](https://developers.cloudflare.com/email-routing/) enabled for receiving
 - [Email Service](https://developers.cloudflare.com/email-service/) enabled for sending
 - [Workers AI](https://developers.cloudflare.com/workers-ai/) enabled (for the agent)
-- [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) configured for deployed/shared environments (required in production)
+- Better Auth signing secret and migrated D1 authentication database
 
-Any user who passes the shared Cloudflare Access policy can access all mailboxes in this app by design. This includes the MCP server at `/mcp` -- external AI tools (Claude Code, Cursor, etc.) connected via MCP can operate on any mailbox by passing a `mailboxId` parameter. There is no per-mailbox authorization; the Cloudflare Access policy is the single trust boundary.
+Any authenticated team member can access all mailboxes. Storage separation between
+mailboxes does not provide employee-level privacy. The API, attachments, agent
+connections and MCP endpoint require a valid Better Auth session; cookie-authenticated
+writes and WebSockets also require the same Origin. External MCP clients need an
+explicit future authentication integration; the former Access token is not accepted.
 
 ## Architecture
 

@@ -4,14 +4,14 @@ import { receiveEmail } from "../workers/index.ts";
 import type { Env } from "../workers/types.ts";
 
 const webhook = "https://discord.com/api/webhooks/123456789/test-token";
-function mailEvent() {
+function mailEvent(to = "inbox@example.com", includeTo = true) {
 	const raw = new TextEncoder().encode([
 		"From: Private Sender <sender@example.org>",
-		"To: inbox@example.com, other@example.org", "Cc: cc@example.org", "Bcc: bcc@example.org",
+		...(includeTo ? ["To: inbox@example.com, other@example.org"] : []), "Cc: cc@example.org", "Bcc: bcc@example.org",
 		"Subject: A confidential subject", "Message-ID: <message@example.org>",
 		"Content-Type: text/plain; charset=utf-8", "", "A confidential body", "",
 	].join("\r\n"));
-	return { raw: new Blob([raw]).stream(), rawSize: raw.length };
+	return { to, raw: new Blob([raw]).stream(), rawSize: raw.length };
 }
 function setup(overrides: Record<string, unknown> = {}) {
 	const mailbox = { findThreadBySubject: mock.fn(async () => null), createEmail: mock.fn(async () => {}) };
@@ -25,7 +25,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 	const tasks: Promise<unknown>[] = [];
 	const ctx = { waitUntil: mock.fn((task) => tasks.push(task)) };
 	return { env, ctx, tasks, mailbox, agent,
-		receive: () => receiveEmail(mailEvent(), env as unknown as Env, ctx as unknown as ExecutionContext),
+		receive: (to = "inbox@example.com") => receiveEmail(mailEvent(to), env as unknown as Env, ctx as unknown as ExecutionContext),
 	};
 }
 describe("incoming mail behavior", () => {
@@ -75,7 +75,8 @@ describe("incoming mail behavior", () => {
 		it(`does not notify for ${reason}`, async () => {
 			const s = setup(reason === "disallowed recipient" ? { EMAIL_ADDRESSES: ["someone-else@example.com"] } : {});
 			if (reason === "missing mailbox") s.env.BUCKET.head.mock.mockImplementation(async () => null);
-			await s.receive();
+			if (reason === "missing mailbox") await assert.rejects(s.receive(), /not provisioned/);
+			else await s.receive();
 			assert.equal(s.mailbox.createEmail.mock.callCount(), 0); assert.equal(fetchMock.mock.callCount(), 0);
 		});
 	}
@@ -94,9 +95,24 @@ describe("incoming mail behavior", () => {
 	});
 	it("notifies only the allowed selected mailbox, not other recipients", async () => {
 		const s = setup({ EMAIL_ADDRESSES: ["other@example.org"] });
-		await s.receive(); await Promise.all(s.tasks);
+		await s.receive("other@example.org"); await Promise.all(s.tasks);
 		assert.equal(JSON.parse(fetchMock.mock.calls[0].arguments[1].body).content, "New mail: other@example.org");
 	});
+	for (const recipient of ["bcc@example.org", "alias@example.org", "inbox+tag@example.com"]) {
+		it(`routes envelope ${recipient} independently of MIME To`, async () => {
+			const s = setup();
+			await s.receive(recipient); await Promise.all(s.tasks);
+			assert.equal(s.env.MAILBOX.idFromName.mock.calls[0].arguments[0], recipient);
+		});
+	}
+
+	it("accepts BCC-only mail with no MIME To", async () => {
+		const s = setup();
+		await receiveEmail(mailEvent("inbox@example.com", false), s.env as unknown as Env, s.ctx as unknown as ExecutionContext);
+		await Promise.all(s.tasks);
+		assert.equal(s.mailbox.createEmail.mock.callCount(), 1);
+	});
+
 	it("isolates synchronous AI binding failures from storage and Discord", async () => {
 		const s = setup({ AUTO_DRAFT_ENABLED: true });
 		s.env.EMAIL_AGENT.get.mock.mockImplementation(() => { throw new Error("agent unavailable"); });

@@ -40,6 +40,7 @@ async function request<T>(
 			},
 		});
 
+		if (res.status === 401 && typeof window !== "undefined") window.location.assign("/login");
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
 			throw new ApiError(res.status, body as Record<string, unknown>);

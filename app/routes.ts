@@ -9,6 +9,9 @@ import {
 } from "@react-router/dev/routes";
 
 export default [
+	route("login", "routes/login.tsx"),
+	route("account", "routes/account.tsx"),
+	route("team", "routes/team.tsx"),
 	index("routes/home.tsx"),
 	route("mailbox/:mailboxId", "routes/mailbox.tsx", [
 		index("routes/mailbox-index.tsx"),

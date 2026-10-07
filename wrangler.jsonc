@@ -1,6 +1,8 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "agentic-inbox",
+	"account_id": "5d286664ee0a1f7d2ed43aeb5de4d36a",
+	"routes": [{ "pattern": "mails.clovair.dev", "custom_domain": true }],
 	"compatibility_date": "2025-11-28",
 	"main": "./workers/app.ts",
 	"observability": {
@@ -10,13 +12,24 @@
 		"nodejs_compat"
 	],
 	"vars": {
-		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
-		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
-		// The worker now fails closed outside local development if Access is not configured.
-		"DOMAINS": "example.com",
-		"EMAIL_ADDRESSES": [],
+		// Set BETTER_AUTH_URL to the deployed HTTPS origin and BETTER_AUTH_SECRET as a Worker secret.
+		"DOMAINS": "clovair.dev",
+		"BETTER_AUTH_URL": "https://mails.clovair.dev",
+		"INBOUND_FORWARDING": {
+			"ggm@clovair.dev": "gjwnsan9420@gmail.com",
+			"payments@clovair.dev": "gjwnsan9420@gmail.com",
+			"tech@clovair.dev": "gjwnsan9420@gmail.com",
+			"admin@clovair.dev": "gjwnsan9420@gmail.com"
+		},
+		"EMAIL_ADDRESSES": ["ggm@clovair.dev", "payments@clovair.dev", "tech@clovair.dev", "admin@clovair.dev"],
 		"AUTO_DRAFT_ENABLED": false
 	},
+	"d1_databases": [{
+		"binding": "AUTH_DB",
+		"database_name": "agentic-inbox-auth",
+		"database_id": "e8b2a980-ddae-4d5b-93b6-e104ef9fd1fd",
+		"migrations_dir": "migrations/auth"
+	}],
 	"send_email": [
 		{
 			"name": "EMAIL",
