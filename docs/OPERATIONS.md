@@ -62,3 +62,5 @@ The administrator-only etc snapshot was downloaded and restored into an isolated
 Deployment 03edac7f-0718-4426-96cd-f20b12833c20 contains recipient migration, snapshot export, actual outbound Message-ID storage and quote cleanup. Validation: 76 tests, typecheck and production build passed.
 
 Round-trip Naver replies revealed a pre-existing threading bug: incoming References/Message-ID strings were used directly as internal conversation IDs. Inbound delivery now resolves these IDs to the existing stored thread. Migration 11 reconnects existing split conversations whose thread ID matches an original Message-ID. Sent messages using a different selected sender are excluded when choosing the latest incoming message for another reply.
+
+Final deployed code commit: e69ba9c8f166908e496626cd96c7f44044504b07; Cloudflare version: 283e7f50-6b9a-4261-808b-0be237555e79. After deployment, the original Naver message, outgoing etc reply and returning Naver reply appeared together as one three-message conversation.
