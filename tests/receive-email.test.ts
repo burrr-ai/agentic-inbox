@@ -41,9 +41,11 @@ describe("incoming mail behavior", () => {
 			await s.receive(); await Promise.all(s.tasks);
 			assert.equal(s.mailbox.createEmail.mock.callCount(), 1);
 			assert.equal(s.env.EMAIL_AGENT.get.mock.callCount(), 0);
-			assert.deepEqual(JSON.parse(fetchMock.mock.calls[0].arguments[1].body), {
-				content: "New mail: inbox@example.com", allowed_mentions: { parse: [] }, flags: 4,
-			});
+			const payload = JSON.parse(fetchMock.mock.calls[0].arguments[1].body);
+			assert.equal(payload.embeds[0].title, "A confidential subject");
+			assert.equal(payload.embeds[0].description, "A confidential body");
+			assert.equal(payload.embeds[0].fields[0].value, "inbox@example.com");
+			assert.deepEqual(payload.allowed_mentions, { parse: [] });
 		});
 	}
 	it("preserves explicitly enabled AI drafting independently of Discord", async () => {
@@ -96,7 +98,7 @@ describe("incoming mail behavior", () => {
 	it("notifies only the allowed selected mailbox, not other recipients", async () => {
 		const s = setup({ EMAIL_ADDRESSES: ["other@example.org"] });
 		await s.receive("other@example.org"); await Promise.all(s.tasks);
-		assert.equal(JSON.parse(fetchMock.mock.calls[0].arguments[1].body).content, "New mail: other@example.org");
+		assert.equal(JSON.parse(fetchMock.mock.calls[0].arguments[1].body).embeds[0].fields[0].value, "other@example.org");
 	});
 	for (const recipient of ["bcc@example.org", "alias@example.org", "inbox+tag@example.com"]) {
 		it(`routes envelope ${recipient} independently of MIME To`, async () => {
@@ -127,7 +129,7 @@ describe("incoming mail behavior", () => {
 			await Promise.all(s.tasks);
 			assert.equal(s.env.MAILBOX.idFromName.mock.calls[0].arguments[0], "etc@clovair.dev");
 			assert.equal(s.mailbox.createEmail.mock.calls[0].arguments[1].envelope_recipient, "asdas@clovair.dev");
-			assert.equal(JSON.parse(fetchMock.mock.calls[0].arguments[1].body).content, "New mail: etc@clovair.dev");
+			assert.equal(JSON.parse(fetchMock.mock.calls[0].arguments[1].body).embeds[0].fields[0].value, "etc@clovair.dev");
 		});
 	}
 	it("keeps a provisioned alias in its own mailbox", async () => {

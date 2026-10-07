@@ -22,13 +22,14 @@ function webhookUrl(value: string): URL | null {
 }
 
 /**
- * Best-effort notification after inbox storage. This deliberately accepts only
- * the mailbox address, never the message or any sender/content/attachment data.
+ * Best-effort notification after inbox storage. Optional previews were explicitly
+ * enabled by the operator; sender, attachments and raw headers are not included.
  * Failures must not reject mail delivery, and secrets must never enter logs.
  */
 export async function notifyDiscordNewMail(
-	env: { DISCORD_WEBHOOK_URL?: string },
+	env: { DISCORD_WEBHOOK_URL?: string; BETTER_AUTH_URL?: string },
 	mailboxAddress: string,
+	preview?: { subject: string; text: string },
 ): Promise<void> {
 	if (!env.DISCORD_WEBHOOK_URL) return;
 	const url = webhookUrl(env.DISCORD_WEBHOOK_URL);
@@ -44,14 +45,34 @@ export async function notifyDiscordNewMail(
 			.replace(/[\x00-\x1f\x7f]/g, "")
 			.slice(0, 320)
 			.replace(/[\\`*_~|[\]<>]/g, "\\$&");
+		const clean = (value: string, limit: number) => {
+			const text = value.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "").trim();
+			return text.length > limit ? text.slice(0, limit - 1) + "…" : text;
+		};
+		let inboxUrl: string | undefined;
+		try {
+			const origin = new URL(env.BETTER_AUTH_URL || "");
+			if (origin.protocol === "https:") inboxUrl = `${origin.origin}/mailbox/${encodeURIComponent(mailboxAddress)}/emails/inbox`;
+		} catch { /* Link is optional when no app origin is configured. */ }
+		const payload = preview ? {
+			username: "Clovair Mail",
+			allowed_mentions: { parse: [] },
+			embeds: [{
+				author: { name: "📬 새 메일이 도착했습니다" },
+				title: clean(preview.subject, 256) || "(제목 없음)",
+				description: clean(preview.text, 700) || "본문 미리보기가 없습니다.",
+				color: 0x5865f2,
+				url: inboxUrl,
+				fields: [{ name: "받은 메일함", value: address, inline: true },
+					...(inboxUrl ? [{ name: "웹메일", value: `[수신함 열기](${inboxUrl})`, inline: true }] : [])],
+				footer: { text: "Clovair · 팀 공용 메일" },
+				timestamp: new Date().toISOString(),
+			}],
+		} : { content: `New mail: ${address}`, allowed_mentions: { parse: [] }, flags: 4 };
 		const response = await fetch(url.toString(), {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				content: `New mail: ${address}`,
-				allowed_mentions: { parse: [] },
-				flags: 4, // SUPPRESS_EMBEDS; never generate link previews.
-			}),
+			body: JSON.stringify(payload),
 			redirect: "error",
 			signal: controller.signal,
 		});
@@ -59,8 +80,16 @@ export async function notifyDiscordNewMail(
 			console.warn("Discord notification failed with HTTP status", response.status);
 		}
 		// wait=true confirms storage on Discord. We do not need its message body.
-		await response.body?.cancel();
-	} catch {
+		await response.body?.cancel().catch(() => {});
+		if (response.ok) console.info("Discord notification accepted");
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "";
+		const kind = controller.signal.aborted ? "timeout"
+			: /redirect/i.test(message) ? "redirect"
+			: /network|connection|socket|fetch failed|failed to fetch/i.test(message) ? "network"
+			: /different request|I\/O|context/i.test(message) ? "request-context"
+			: /ssl|tls|certificate/i.test(message) ? "tls" : "other";
+		console.warn("Discord delivery error category", kind);
 		// Fetch errors can contain the URL/token. Log only a constant message.
 		console.warn("Discord notification failed; incoming email remains stored");
 	} finally {

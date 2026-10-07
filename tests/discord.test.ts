@@ -64,7 +64,8 @@ describe("Discord new-mail notifications", () => {
 	it("does not log fetch errors containing a secret URL", async () => {
 		fetchMock.mock.mockImplementation(async () => { throw new Error(`failed to fetch ${webhook}`); });
 		await notifyDiscordNewMail({ DISCORD_WEBHOOK_URL: webhook }, "inbox@example.com");
-		assert.deepEqual(warn.mock.calls[0].arguments, ["Discord notification failed; incoming email remains stored"]);
+		assert.deepEqual(warn.mock.calls[0].arguments, ["Discord delivery error category", "network"]);
+		assert.deepEqual(warn.mock.calls[1].arguments, ["Discord notification failed; incoming email remains stored"]);
 	});
 	it("aborts slow requests after five seconds", async () => {
 		mock.timers.enable({ apis: ["setTimeout"] });
@@ -76,4 +77,20 @@ describe("Discord new-mail notifications", () => {
 		await result;
 		assert.equal(fetchMock.mock.calls[0].arguments[1].signal.aborted, true);
 	});
+	it("renders bounded title and body embeds with mentions disabled and no embed suppression", async () => {
+		await notifyDiscordNewMail({ DISCORD_WEBHOOK_URL: webhook, BETTER_AUTH_URL: "https://mails.clovair.dev" }, "ggm@clovair.dev", { subject: "A".repeat(300), text: "@everyone " + "B".repeat(1000) });
+		const payload = JSON.parse(fetchMock.mock.calls[0].arguments[1].body);
+		assert.equal(payload.embeds[0].title.length, 256);
+		assert.equal(payload.embeds[0].description.length, 700);
+		assert.equal(payload.embeds[0].url, "https://mails.clovair.dev/mailbox/ggm%40clovair.dev/emails/inbox");
+		assert.deepEqual(payload.allowed_mentions, { parse: [] });
+		assert.equal(payload.flags, undefined);
+		assert.equal(payload.embeds[0].image, undefined);
+	});
+	it("does not treat response cleanup failure as failed delivery", async () => {
+		fetchMock.mock.mockImplementation(async () => ({ ok: true, body: { cancel: async () => { throw new Error("cleanup"); } } }));
+		await notifyDiscordNewMail({ DISCORD_WEBHOOK_URL: webhook }, "ggm@clovair.dev");
+		assert.equal(warn.mock.callCount(), 0);
+	});
+
 });

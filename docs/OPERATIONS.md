@@ -13,9 +13,9 @@
 
 ## Mail routing: current and proposed
 
-On 2026-10-08 KST, after explicit approval, only `ggm@clovair.dev` was changed from direct Gmail forwarding to Worker `agentic-inbox` (rule `1332fd772bd8402782d3fa7d8380dd76`). The Worker saves the message and forwards it to `gjwnsan9420@gmail.com`. `payments`, `tech`, and `admin` still forward directly to Gmail. MX is unchanged and catch-all stays disabled. The ggm mailbox registry was checked in R2 before this change. External delivery verification is pending the user's fresh test message.
+On 2026-10-08 KST, after explicit approval, only `ggm@clovair.dev` was changed from direct Gmail forwarding to Worker `agentic-inbox` (rule `1332fd772bd8402782d3fa7d8380dd76`). The Worker saves the message and forwards it to `gjwnsan9420@gmail.com`. `payments`, `tech`, and `admin` still forward directly to Gmail. MX is unchanged and catch-all stays disabled. The ggm mailbox registry was checked in R2 before this change. A subsequent Naver test (test2, 03:03 KST) was processed successfully by the Worker and was visible in the ggm inbox. The earlier test only showed a forwarding action; propagation is suspected, not proven.
 
-The Worker now stores each message using Cloudflare's actual SMTP envelope recipient (`event.to`), not the visible MIME To header. BCC-only and forwarded messages therefore do not select an unrelated mailbox. Addresses are case normalized, but plus tags are not merged and arbitrary aliases are not invented. Only the four configured addresses are enabled. Unprovisioned allowed mailboxes cause a delivery error instead of silent loss.
+The Worker now stores each message using Cloudflare's actual SMTP envelope recipient (`event.to`), not the visible MIME To header. BCC-only and forwarded messages therefore do not select an unrelated mailbox. Addresses are case normalized, but plus tags are not merged and arbitrary aliases are not invented. The four original addresses and etc are provisioned; production routing currently delivers only ggm to the Worker. Unprovisioned allowed mailboxes cause a delivery error instead of silent loss.
 
 `INBOUND_FORWARDING` configures the four exact addresses to also forward to the existing verified Gmail destination. The Worker attempts Gmail forwarding even when app storage fails. Either failure is surfaced to Email Routing. Partial success is possible and a later retry can duplicate a successful copy; exactly-once delivery is not implemented. Gmail state and sent replies are not synchronized back to the app.
 
@@ -23,7 +23,7 @@ Before cutover:
 
 1. Approve a dedicated test recipient and the external sender/destination. Add a test mailbox and exact routing/forwarding configuration temporarily, or use an approved subdomain. Do not alter the four live rules for the test.
 2. Verify external inbound delivery, BCC, forwarding, attachments, new outbound mail, replies and sender selection. Confirm both app and Gmail copies. No real mail is sent without approved recipients.
-3. User enters `DISCORD_WEBHOOK_URL` with `npm run cf -- secret put DISCORD_WEBHOOK_URL` or the dashboard, then approves the channel and test notification. Verify the message contains only `New mail: <mailbox address>`.
+3. User enters `DISCORD_WEBHOOK_URL` with `npm run cf -- secret put DISCORD_WEBHOOK_URL` or the dashboard, then approves the channel and test notification. The operator subsequently requested embeds with subject/body previews: verify the mailbox, bounded subject/body, timestamp and inbox link, with mentions disabled and no attachments.
 4. Confirm `AUTO_DRAFT_ENABLED=false`. Mock tests verify no incoming-mail AI calls, no notification before storage, and Discord failure isolation.
 5. Show a diff of all four individual rules: **forward to Gmail → send to agentic-inbox Worker**. Individual rules take precedence over catch-all. Obtain approval, then change only those four actions. No MX change is expected when retaining Cloudflare Email Routing.
 6. Roll back by restoring the four Gmail-forward actions. Leave app data intact.
@@ -62,4 +62,4 @@ References:
 - https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/
 
 
-2026-10-08 reception investigation: ggm inbox API returned HTTP 200 with totalCount 0. The Naver test at 02:51:53 KST is recorded as a forwarding action in Email Routing; the Worker email-event log query returned zero events. A fresh test is pending to distinguish routing propagation from worker delivery. DISCORD_WEBHOOK_URL has now been registered as a Worker secret.
+2026-10-08 reception investigation: ggm inbox API returned HTTP 200 with totalCount 0. The Naver test at 02:51:53 KST is recorded as a forwarding action in Email Routing; the Worker email-event log query returned zero events. The subsequent test2 arrived in the app successfully. Discord background delivery logged a generic fetch failure; a local replay of the address-only alert received HTTP 200 and a stored Discord message ID. Worker-originated delivery still needs verification. DISCORD_WEBHOOK_URL has now been registered as a Worker secret.

@@ -14,6 +14,7 @@ import {
 	generateMessageId,
 	buildThreadingHeaders,
 	listMailboxes,
+	stripHtmlToText,
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
@@ -413,7 +414,10 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number; to: s
 
 	// Only notify once the incoming message is safely stored. Keep this independent
 	// of AI processing and outside the delivery path so Discord cannot block mail.
-	ctx.waitUntil(notifyDiscordNewMail(env, mailboxId));
+	ctx.waitUntil(notifyDiscordNewMail(env, mailboxId, {
+		subject: parsedEmail.subject || "",
+		text: parsedEmail.text || stripHtmlToText(parsedEmail.html || ""),
+	}));
 
 	if (isAutoDraftEnabled(env)) {
 		ctx.waitUntil((async () => {

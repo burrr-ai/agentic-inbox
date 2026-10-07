@@ -49,7 +49,7 @@ See [operations and recovery](docs/OPERATIONS.md) for the rollout and backup pro
 - **Per-mailbox isolation** — Each mailbox runs in its own Durable Object with SQLite storage and R2 for attachments
 - **Built-in AI agent** — Side panel with 9 email tools for reading, searching, drafting, and sending
 - **Opt-in auto-draft** — Automatic AI processing of incoming mail is disabled by default; interactive drafting remains available
-- **Private Discord alerts** — Optional new-mail notifications include only the receiving mailbox address, never the sender, subject, body, or attachments
+- **Discord previews** — New-mail embeds include the mailbox, subject, a bounded body preview, and an inbox link; mentions are disabled and attachments are excluded
 - **Configurable and persistent** — Custom system prompts per mailbox, persistent chat history, streaming markdown responses, and tool call visibility
 
 ## Stack
@@ -82,17 +82,18 @@ To opt back in, explicitly set this variable to boolean `true` or string `"true"
 #### Discord notifications (optional)
 
 Create an incoming webhook in the Discord **text channel** approved to receive
-mailbox-address notifications. Store the copied URL as a Worker secret, using the
+mail subject and body previews. Store the copied URL as a Worker secret, using the
 Cloudflare dashboard or `wrangler secret put DISCORD_WEBHOOK_URL`. For local
 development only, put it in the ignored `.dev.vars` file. Never commit the URL:
 it contains a token that grants permission to post to that Discord channel.
 
-When configured, each successfully stored incoming email sends only
-`New mail: hello@example.com`, using the receiving mailbox address. Sender,
-subject, message body, attachments, and other recipient addresses are never
-included. Mentions and link previews are disabled. This one webhook receives
-notifications for all existing mailboxes handled by this Worker; use a channel
-whose members are authorized to see those mailbox addresses.
+When configured, each successfully stored incoming email sends a Clovair Mail
+embed containing the mailbox address, subject (up to 256 characters), plain-text
+body preview (up to 700 characters), received time, and a link to the inbox.
+The operator explicitly requested subject/body previews on 2026-10-08, replacing
+the original address-only policy. Sender fields, attachments and raw headers are
+not sent. Mentions are disabled. This webhook receives notifications for all
+mailboxes handled by the Worker.
 
 Only HTTPS URLs on `discord.com` matching `/api/webhooks/ID/TOKEN` or
 `/api/v10/webhooks/ID/TOKEN` are accepted. Query strings, fragments, custom ports,
