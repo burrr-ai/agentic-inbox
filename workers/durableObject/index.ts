@@ -804,6 +804,14 @@ export class MailboxDO extends DurableObject<Env> {
 
 	// ── Threading helpers (raw SQL) ────────────────────────────────
 
+	async findThreadByMessageIds(messageIds: string[]): Promise<string | null> {
+		for (const id of messageIds.slice(0, 100)) {
+			const email = this.db.select({ thread: schema.emails.thread_id, id: schema.emails.id }).from(schema.emails).where(eq(schema.emails.message_id, id)).get();
+			if (email) return email.thread || email.id;
+		}
+		return null;
+	}
+
 	async findThreadBySubject(subject: string, senderAddress?: string): Promise<string | null> {
 		const normalized = subject
 			.replace(/^(?:(?:re|fwd?|fw|aw|wg|r[eé]f|sv)\s*:\s*)+/i, "")

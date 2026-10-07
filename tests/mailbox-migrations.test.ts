@@ -17,8 +17,11 @@ test("envelope migration preserves existing messages and is safe to repeat", () 
 	try {
 		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations.slice(0, 8), storage);
 		db.exec("INSERT INTO emails (id, folder_id, recipient, body) VALUES ('existing', 'inbox', 'ggm@clovair.dev', 'preserved')");
+		db.exec("INSERT OR IGNORE INTO emails (id, folder_id, message_id, thread_id) VALUES ('original', 'inbox', 'original@sender', 'original')");
+		db.exec("INSERT OR IGNORE INTO emails (id, folder_id, message_id, thread_id, in_reply_to) VALUES ('reply', 'inbox', 'reply@sender', 'original@sender', 'original@sender')");
 		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations, storage);
 		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations, storage);
+		assert.equal(db.prepare("SELECT thread_id FROM emails WHERE id = 'reply'").get()?.thread_id, "original");
 		const row = db.prepare("SELECT body, envelope_recipient FROM emails WHERE id = 'existing'").get();
 		assert.equal(row?.body, "preserved");
 		assert.equal(row?.envelope_recipient, null);

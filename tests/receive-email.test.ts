@@ -14,7 +14,7 @@ function mailEvent(to = "inbox@example.com", includeTo = true) {
 	return { to, raw: new Blob([raw]).stream(), rawSize: raw.length };
 }
 function setup(overrides: Record<string, unknown> = {}) {
-	const mailbox = { findThreadBySubject: mock.fn(async () => null), createEmail: mock.fn(async () => {}) };
+	const mailbox = { findThreadByMessageIds: mock.fn(async () => null), findThreadBySubject: mock.fn(async () => null), createEmail: mock.fn(async () => {}) };
 	const agent = { fetch: mock.fn(async () => new Response("{}")) };
 	const env = {
 		BUCKET: { head: mock.fn(async () => ({})), put: mock.fn() },
@@ -35,6 +35,14 @@ describe("incoming mail behavior", () => {
 		for (const method of ["warn", "log", "error"] as const) mock.method(console, method, () => {});
 	});
 	afterEach(() => mock.restoreAll());
+	it("reuses the stored conversation when an external reply references a provider Message-ID", async () => {
+		const s = setup();
+		s.mailbox.findThreadByMessageIds.mock.mockImplementation(async ids => ids.includes("sent@provider.test") ? "existing-conversation" : null);
+		const raw = new TextEncoder().encode("From: sender@example.org\r\nTo: inbox@example.com\r\nSubject: Re: Test\r\nIn-Reply-To: <sent@provider.test>\r\nReferences: <original@example.org> <sent@provider.test>\r\n\r\nReply");
+		await receiveEmail({ to: "inbox@example.com", raw: new Blob([raw]).stream(), rawSize: raw.length } as any, s.env as any, s.ctx as any);
+		await Promise.all(s.tasks);
+		assert.equal(s.mailbox.createEmail.mock.calls[0].arguments[1].thread_id, "existing-conversation");
+	});
 	for (const flag of [undefined, false, "false"]) {
 		it(`stores mail without contacting AI when flag is ${JSON.stringify(flag)}`, async () => {
 			const s = setup({ AUTO_DRAFT_ENABLED: flag });

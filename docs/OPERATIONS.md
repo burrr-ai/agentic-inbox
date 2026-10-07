@@ -59,4 +59,6 @@ References:
 
 The administrator-only etc snapshot was downloaded and restored into an isolated local SQLite database on 2026-10-08: four emails, zero attachments, integrity_check=ok. Authentication backup restore also passed. These are local rehearsal copies, not scheduled offsite backups.
 
-Deployment 03edac7f-0718-4426-96cd-f20b12833c20 contains recipient migration, snapshot export, actual outbound Message-ID storage and quote cleanup. Validation: 75 tests, typecheck and production build passed.
+Deployment 03edac7f-0718-4426-96cd-f20b12833c20 contains recipient migration, snapshot export, actual outbound Message-ID storage and quote cleanup. Validation: 76 tests, typecheck and production build passed.
+
+Round-trip Naver replies revealed a pre-existing threading bug: incoming References/Message-ID strings were used directly as internal conversation IDs. Inbound delivery now resolves these IDs to the existing stored thread. Migration 11 reconnects existing split conversations whose thread ID matches an original Message-ID. Sent messages using a different selected sender are excluded when choosing the latest incoming message for another reply.

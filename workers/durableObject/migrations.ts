@@ -176,4 +176,14 @@ export const mailboxMigrations: Migration[] = [
 		name: "10_index_envelope_recipient",
 		sql: txn(`CREATE INDEX IF NOT EXISTS idx_emails_envelope_recipient ON emails(envelope_recipient);`),
 	},
+	{
+		name: "11_reconnect_reply_threads",
+		sql: txn(`UPDATE emails SET thread_id = (
+			SELECT COALESCE(parent.thread_id, parent.id) FROM emails parent
+			WHERE parent.message_id = emails.thread_id AND parent.id != emails.id LIMIT 1
+		) WHERE EXISTS (
+			SELECT 1 FROM emails parent WHERE parent.message_id = emails.thread_id
+			AND parent.id != emails.id AND COALESCE(parent.thread_id, parent.id) != emails.thread_id
+		);`),
+	},
 ];

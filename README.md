@@ -38,9 +38,10 @@ Set `BETTER_AUTH_SECRET` as a Worker secret and `BETTER_AUTH_URL` to the HTTPS a
 origin. Local development requires a separate ignored `.dev.vars` with these two
 values (`BETTER_AUTH_URL=http://localhost:5173`) and local D1 migrations.
 
-Do **not** enable catch-all or replace existing Gmail routing during app deployment.
-Provision the four configured mailboxes first. Once a test address is approved and
-verified, present the individual rule changes for approval before switching delivery.
+Production routing is active: the four original addresses and catch-all target the
+Worker. Original addresses also forward to Gmail; unknown addresses go to etc.
+Use **메일함 추가** to provision another address and automatically move matching
+etc messages into it. New addresses do not forward to Gmail.
 See [operations and recovery](docs/OPERATIONS.md) for the rollout and backup procedure.
 
 ## Features

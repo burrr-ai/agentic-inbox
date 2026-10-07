@@ -77,7 +77,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const lastReceivedMessage = useMemo(() => {
 		const ce = currentMailbox?.email;
-		const received = allMessages.filter((msg) => !draftMessageIds.has(msg.id) && msg.sender !== ce);
+		const received = allMessages.filter((msg) => !draftMessageIds.has(msg.id) && msg.folder_id !== Folders.SENT && (Boolean(msg.envelope_recipient) || msg.sender !== ce));
 		if (received.length > 0) return received[0];
 		const nonDrafts = allMessages.filter((msg) => !draftMessageIds.has(msg.id));
 		return nonDrafts.length > 0 ? nonDrafts[0] : email;
