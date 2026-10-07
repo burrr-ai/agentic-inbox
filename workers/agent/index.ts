@@ -31,6 +31,7 @@ import {
 } from "../lib/tools";
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
 import type { Env } from "../types";
+import { isAutoDraftEnabled } from "../lib/inbound-options";
 
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
@@ -334,6 +335,9 @@ export class EmailAgent extends AIChatAgent<any> {
 		threadId: string;
 	}) {
 		const env = this.env as Env;
+		// Also guard direct calls to the agent endpoint/RPC, before reading email
+		// content or invoking any AI model. Interactive, requested drafting remains.
+		if (!isAutoDraftEnabled(env)) return { status: "auto_draft_disabled" };
 		const workersai = createWorkersAI({ binding: env.AI });
 		const tools = createEmailTools(env, emailData.mailboxId);
 		const systemPrompt = await getSystemPrompt(env, emailData.mailboxId);

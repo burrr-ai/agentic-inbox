@@ -40,7 +40,8 @@ https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
 - **Full email client** — Send and receive emails via Cloudflare Email Routing with a rich text composer, reply/forward threading, folder organization, search, and attachments
 - **Per-mailbox isolation** — Each mailbox runs in its own Durable Object with SQLite storage and R2 for attachments
 - **Built-in AI agent** — Side panel with 9 email tools for reading, searching, drafting, and sending
-- **Auto-draft on new email** — Agent automatically reads inbound emails and generates draft replies, always requiring explicit confirmation before sending
+- **Opt-in auto-draft** — Automatic AI processing of incoming mail is disabled by default; interactive drafting remains available
+- **Private Discord alerts** — Optional new-mail notifications include only the receiving mailbox address, never the sender, subject, body, or attachments
 - **Configurable and persistent** — Custom system prompts per mailbox, persistent chat history, streaming markdown responses, and tool call visibility
 
 ## Stack
@@ -61,6 +62,54 @@ npm run dev
 
 1. Set your domain in `wrangler.jsonc`
 2. Create an R2 bucket named `agentic-inbox`: `wrangler r2 bucket create agentic-inbox`
+
+#### Automatic drafts
+
+`AUTO_DRAFT_ENABLED` defaults to `false` in `wrangler.jsonc`. When it is unset or
+false, incoming emails are saved without triggering AI reads, scans, or draft
+generation. The agent's incoming-email endpoint also enforces this setting.
+Manually requested AI chat and drafting still work. Existing drafts are retained.
+To opt back in, explicitly set this variable to boolean `true` or string `"true"`.
+
+#### Discord notifications (optional)
+
+Create an incoming webhook in the Discord **text channel** approved to receive
+mailbox-address notifications. Store the copied URL as a Worker secret, using the
+Cloudflare dashboard or `wrangler secret put DISCORD_WEBHOOK_URL`. For local
+development only, put it in the ignored `.dev.vars` file. Never commit the URL:
+it contains a token that grants permission to post to that Discord channel.
+
+When configured, each successfully stored incoming email sends only
+`New mail: hello@example.com`, using the receiving mailbox address. Sender,
+subject, message body, attachments, and other recipient addresses are never
+included. Mentions and link previews are disabled. This one webhook receives
+notifications for all existing mailboxes handled by this Worker; use a channel
+whose members are authorized to see those mailbox addresses.
+
+Only HTTPS URLs on `discord.com` matching `/api/webhooks/ID/TOKEN` or
+`/api/v10/webhooks/ID/TOKEN` are accepted. Query strings, fragments, custom ports,
+and redirects are rejected. Forum/media channels and thread destinations are not
+supported. Omit or remove the secret to disable notifications.
+
+Notifications run in the background **after email storage**, independently of
+auto-drafting. They are best-effort, have a five-second timeout, and are not
+retried automatically. A Discord outage or rate limit never rejects a stored
+email, but the alert can be missed. Failures log only generic messages or HTTP
+status codes, never webhook tokens or email data. A retried upstream mail
+delivery may result in a duplicate message and notification, as before.
+
+### Verification
+
+Use Node.js 24 or later for the dependency-free test runner.
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+The tests mock network requests and Cloudflare bindings; they do not send real
+emails or Discord messages.
 
 ### Deploy
 
