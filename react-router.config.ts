@@ -6,6 +6,8 @@ import type { Config } from "@react-router/dev/config";
 
 export default {
   ssr: true,
+  // Small, authenticated app: ship the route manifest with the initial page.
+  routeDiscovery: { mode: "initial" },
   future: {
     v8_viteEnvironmentApi: true,
   },
