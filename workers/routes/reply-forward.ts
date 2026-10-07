@@ -47,7 +47,8 @@ export async function handleReplyEmail(c: AppContext) {
 		throw e;
 	}
 
-	const { messageId, outgoingMessageId } = generateMessageId(fromDomain);
+	const { messageId } = generateMessageId(fromDomain);
+	let outgoingMessageId: string;
 
 	const rateLimitError = await (stub as unknown as RateLimitStub)
 		.checkSendRateLimit();
@@ -56,7 +57,7 @@ export async function handleReplyEmail(c: AppContext) {
 	}
 
 	try {
-		await sendEmail(c.env.EMAIL, {
+		const sent = await sendEmail(c.env.EMAIL, {
 			to,
 			cc,
 			bcc,
@@ -73,8 +74,13 @@ export async function handleReplyEmail(c: AppContext) {
 			})),
 			headers: buildThreadingHeaders(originalMsgId, references),
 		});
-	} catch {
-		console.error("Outbound provider rejected the message");
+		outgoingMessageId = sent.messageId.replace(/^<|>$/g, "");
+	} catch (error) {
+		const codeValue = (error as { code?: unknown })?.code;
+		const code = typeof codeValue === "string" && /^[A-Z_0-9]{1,80}$/.test(codeValue) ? codeValue : "UNKNOWN";
+		const message = error instanceof Error ? error.message : "";
+		const reason = /verified|not allowed|not available/i.test(message) ? "sender-or-recipient-verification" : /EmailMessage|structured|unsupported|not supported/i.test(message) ? "binding-format" : /rate|quota/i.test(message) ? "quota" : "other";
+		console.error("Outbound provider rejected the message", code, reason);
 		return c.json({ error: "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요." }, 502);
 	}
 
@@ -141,7 +147,8 @@ export async function handleForwardEmail(c: AppContext) {
 		throw e;
 	}
 
-	const { messageId, outgoingMessageId } = generateMessageId(fromDomain);
+	const { messageId } = generateMessageId(fromDomain);
+	let outgoingMessageId: string;
 
 	const rateLimitError = await (stub as unknown as RateLimitStub)
 		.checkSendRateLimit();
@@ -150,7 +157,7 @@ export async function handleForwardEmail(c: AppContext) {
 	}
 
 	try {
-		await sendEmail(c.env.EMAIL, {
+		const sent = await sendEmail(c.env.EMAIL, {
 			to,
 			cc,
 			bcc,
@@ -166,8 +173,13 @@ export async function handleForwardEmail(c: AppContext) {
 				contentId: att.contentId,
 			})),
 		});
-	} catch {
-		console.error("Outbound provider rejected the message");
+		outgoingMessageId = sent.messageId.replace(/^<|>$/g, "");
+	} catch (error) {
+		const codeValue = (error as { code?: unknown })?.code;
+		const code = typeof codeValue === "string" && /^[A-Z_0-9]{1,80}$/.test(codeValue) ? codeValue : "UNKNOWN";
+		const message = error instanceof Error ? error.message : "";
+		const reason = /verified|not allowed|not available/i.test(message) ? "sender-or-recipient-verification" : /EmailMessage|structured|unsupported|not supported/i.test(message) ? "binding-format" : /rate|quota/i.test(message) ? "quota" : "other";
+		console.error("Outbound provider rejected the message", code, reason);
 		return c.json({ error: "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요." }, 502);
 	}
 

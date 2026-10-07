@@ -15,7 +15,7 @@ test("envelope migration preserves existing messages and is safe to repeat", () 
 		catch (error) { db.exec("ROLLBACK"); throw error; }
 	} };
 	try {
-		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations.slice(0, -1), storage);
+		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations.slice(0, 8), storage);
 		db.exec("INSERT INTO emails (id, folder_id, recipient, body) VALUES ('existing', 'inbox', 'ggm@clovair.dev', 'preserved')");
 		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations, storage);
 		applyMigrations(sql as unknown as SqlStorage, mailboxMigrations, storage);

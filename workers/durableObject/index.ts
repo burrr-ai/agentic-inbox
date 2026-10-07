@@ -4,7 +4,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
-import { eq, and, or, asc, desc, sql } from "drizzle-orm";
+import { eq, and, or, asc, desc, sql, inArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { Folders } from "../../shared/folders";
@@ -108,6 +108,69 @@ export class MailboxDO extends DurableObject<Env> {
 		super(state, env);
 		this.db = drizzle(this.ctx.storage, { schema });
 		applyMigrations(this.ctx.storage.sql, mailboxMigrations, this.ctx.storage);
+	}
+
+	/** Private RPC used by the authenticated backup route. */
+	async exportSnapshot() {
+		return { version: 1, folders: this.db.select().from(schema.folders).all(),
+			emails: this.db.select().from(schema.emails).all(),
+			attachments: this.db.select().from(schema.attachments).all() };
+	}
+
+	/** Durable retry queue: destination import completes before source deletion. */
+	async queueRecipientMove(recipient: string) {
+		if (recipient === this.env.CATCH_ALL_MAILBOX) return;
+		await this.ctx.blockConcurrencyWhile(async () => {
+			const pending = await this.ctx.storage.get<string[]>("recipientMoves") || [];
+			if (!pending.includes(recipient)) pending.push(recipient);
+			await this.ctx.storage.put("recipientMoves", pending);
+			await this.ctx.storage.setAlarm(Date.now() + 100);
+		});
+	}
+
+	async importRecipientBatch(batch: { folders: (typeof schema.folders.$inferSelect)[];
+		emails: (typeof schema.emails.$inferSelect)[]; attachments: (typeof schema.attachments.$inferSelect)[] }) {
+		this.ctx.storage.transactionSync(() => {
+			const folderIds = new Map<string, string>();
+			for (const folder of batch.folders) {
+				const existing = this.db.select().from(schema.folders).where(eq(schema.folders.name, folder.name)).get();
+				if (existing) folderIds.set(folder.id, existing.id);
+				else { this.db.insert(schema.folders).values(folder).onConflictDoNothing().run(); folderIds.set(folder.id, folder.id); }
+			}
+			for (const email of batch.emails) this.db.insert(schema.emails).values({ ...email, folder_id: folderIds.get(email.folder_id) || email.folder_id }).onConflictDoNothing().run();
+			for (const attachment of batch.attachments) this.db.insert(schema.attachments).values(attachment).onConflictDoNothing().run();
+		});
+	}
+
+	async alarm() {
+		await this.ctx.blockConcurrencyWhile(async () => {
+			const pending = await this.ctx.storage.get<string[]>("recipientMoves") || [];
+			if (!pending.length) return;
+			try {
+				const recipient = pending[0];
+				if (!(await this.env.BUCKET.head(`mailboxes/${recipient}.json`))) pending.shift();
+				else {
+					const emails = this.db.select().from(schema.emails).where(eq(schema.emails.envelope_recipient, recipient)).limit(30).all();
+					if (!emails.length) pending.shift();
+					else {
+						const ids = emails.map(email => email.id);
+						const attachments = this.db.select().from(schema.attachments).where(inArray(schema.attachments.email_id, ids)).all();
+						const folders = this.db.select().from(schema.folders).all();
+						const target = this.env.MAILBOX.get(this.env.MAILBOX.idFromName(recipient));
+						await target.importRecipientBatch({ folders, emails, attachments });
+						this.ctx.storage.transactionSync(() => {
+							this.db.delete(schema.attachments).where(inArray(schema.attachments.email_id, ids)).run();
+							this.db.delete(schema.emails).where(inArray(schema.emails.id, ids)).run();
+						});
+					}
+				}
+				await this.ctx.storage.put("recipientMoves", pending);
+				if (pending.length) await this.ctx.storage.setAlarm(Date.now() + 1000);
+			} catch {
+				console.error("Mailbox reclassification pending retry");
+				await this.ctx.storage.setAlarm(Date.now() + 60000);
+			}
+		});
 	}
 
 	// ── Email CRUD (Drizzle) ───────────────────────────────────────

@@ -172,4 +172,8 @@ export const mailboxMigrations: Migration[] = [
 		name: "9_add_envelope_recipient",
 		sql: txn(`ALTER TABLE emails ADD COLUMN envelope_recipient TEXT;`),
 	},
+	{
+		name: "10_index_envelope_recipient",
+		sql: txn(`CREATE INDEX IF NOT EXISTS idx_emails_envelope_recipient ON emails(envelope_recipient);`),
+	},
 ];

@@ -21,6 +21,7 @@ import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
+import { createAuth } from "./lib/auth";
 import { isAutoDraftEnabled } from "./lib/inbound-options";
 import { notifyDiscordNewMail } from "./lib/discord";
 
@@ -116,6 +117,10 @@ app.post("/api/v1/mailboxes", async (c) => {
 	await c.env.BUCKET.put(key, JSON.stringify(finalSettings));
 	const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(email));
 	await stub.getFolders();
+	if (c.env.CATCH_ALL_MAILBOX && email !== c.env.CATCH_ALL_MAILBOX) {
+		const fallback = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(c.env.CATCH_ALL_MAILBOX));
+		await fallback.queueRecipientMove(email);
+	}
 	return c.json({ id: email, email, name, settings: finalSettings }, 201);
 });
 
@@ -181,18 +186,24 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		throw e;
 	}
 
-	const { messageId, outgoingMessageId } = generateMessageId(fromDomain);
+	const { messageId } = generateMessageId(fromDomain);
+	let outgoingMessageId: string;
 	const stub = c.var.mailboxStub;
 	const rateLimitError = await (stub as any).checkSendRateLimit();
 	if (rateLimitError) return c.json({ error: rateLimitError }, 429);
 	try {
-		await sendEmail(c.env.EMAIL, {
+		const sent = await sendEmail(c.env.EMAIL, {
 			to, cc, bcc, from, subject, html, text,
 			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
 			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
 		});
-	} catch {
-		console.error("Outbound provider rejected the message");
+		outgoingMessageId = sent.messageId.replace(/^<|>$/g, "");
+	} catch (error) {
+		const codeValue = (error as { code?: unknown })?.code;
+		const code = typeof codeValue === "string" && /^[A-Z_0-9]{1,80}$/.test(codeValue) ? codeValue : "UNKNOWN";
+		const message = error instanceof Error ? error.message : "";
+		const reason = /verified|not allowed|not available/i.test(message) ? "sender-or-recipient-verification" : /EmailMessage|structured|unsupported|not supported/i.test(message) ? "binding-format" : /rate|quota/i.test(message) ? "quota" : "other";
+		console.error("Outbound provider rejected the message", code, reason);
 		return c.json({ error: "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요." }, 502);
 	}
 
@@ -333,6 +344,18 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	return new Response(obj.body, { headers });
 });
 
+// Administrator-only portable mailbox snapshots. Attachment bytes remain in R2
+// and are backed up separately using the keys in the snapshot metadata.
+app.get("/api/v1/mailboxes/:mailboxId/backup", async (c: AppContext) => {
+	const session = await createAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+	if (session?.user.role !== "admin") return c.json({ error: "Administrator required" }, 403);
+	const mailboxId = c.req.param("mailboxId")!;
+	const snapshot = await c.var.mailboxStub.exportSnapshot();
+	const settings = await c.env.BUCKET.get(`mailboxes/${mailboxId}.json`);
+	c.header("Content-Disposition", `attachment; filename="mailbox-${encodeURIComponent(mailboxId)}.json"`);
+	return c.json({ ...snapshot, mailboxId, settings: settings ? await settings.json() : null, exportedAt: new Date().toISOString() });
+});
+
 // -- Receive inbound email ------------------------------------------
 
 const MAX_EMAIL_SIZE = 25 * 1024 * 1024;
@@ -416,6 +439,14 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number; to: s
 		in_reply_to: inReplyTo, email_references: emailReferences.length > 0 ? JSON.stringify(emailReferences) : null,
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 	}, attachmentData);
+
+	// If creation raced an already-running delivery, queue a second sweep so
+	// the older delivery does not remain stranded in the shared fallback.
+	if (mailboxId !== envelopeRecipient) {
+		ctx.waitUntil((async () => {
+			if (await env.BUCKET.head(`mailboxes/${envelopeRecipient}.json`)) await stub.queueRecipientMove(envelopeRecipient);
+		})().catch(() => console.warn("Recipient move sweep could not be queued")));
+	}
 
 	// Only notify once the incoming message is safely stored. Keep this independent
 	// of AI processing and outside the delivery path so Discord cannot block mail.
