@@ -5,4 +5,6 @@
 export interface Env extends Cloudflare.Env {
 	POLICY_AUD: string;
 	TEAM_DOMAIN: string;
+	/** Optional Worker secret. Never expose this URL to the client. */
+	DISCORD_WEBHOOK_URL?: string;
 }

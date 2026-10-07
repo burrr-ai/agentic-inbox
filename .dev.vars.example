@@ -1,3 +1,7 @@
 # Cloudflare Access (required in production). TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 POLICY_AUD=your-access-policy-audience-tag
 TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+
+# Optional: incoming-webhook URL for an approved Discord text channel.
+# Leave unset to disable notifications. Never commit a real webhook URL.
+# DISCORD_WEBHOOK_URL=
