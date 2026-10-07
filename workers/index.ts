@@ -105,9 +105,9 @@ app.get("/api/v1/mailboxes", async (c) => {
 app.post("/api/v1/mailboxes", async (c) => {
 	const { name, settings, email: rawEmail } = CreateMailboxBody.parse(await c.req.json());
 	const email = rawEmail.toLowerCase();
-	const allowedAddresses = (c.env.EMAIL_ADDRESSES ?? []) as string[];
-	if (allowedAddresses.length > 0 && !allowedAddresses.map((a) => a.toLowerCase()).includes(email)) {
-		return c.json({ error: "Mailbox creation is restricted to configured EMAIL_ADDRESSES" }, 403);
+	const allowedDomains = (c.env.DOMAINS || "").split(",").map((domain) => domain.trim().toLowerCase());
+	if (!allowedDomains.includes(email.split("@")[1])) {
+		return c.json({ error: "이 도메인에는 메일함을 만들 수 없습니다." }, 403);
 	}
 	const key = `mailboxes/${email}.json`;
 	if (await c.env.BUCKET.head(key)) return c.json({ error: "Mailbox already exists" }, 409);
@@ -185,6 +185,17 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const stub = c.var.mailboxStub;
 	const rateLimitError = await (stub as any).checkSendRateLimit();
 	if (rateLimitError) return c.json({ error: rateLimitError }, 429);
+	try {
+		await sendEmail(c.env.EMAIL, {
+			to, cc, bcc, from, subject, html, text,
+			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
+			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
+		});
+	} catch {
+		console.error("Outbound provider rejected the message");
+		return c.json({ error: "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요." }, 502);
+	}
+
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
 	await stub.createEmail(Folders.SENT, {
@@ -204,13 +215,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		]),
 	}, attachmentData);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to, cc, bcc, from, subject, html, text,
-			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
-			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
-	);
+
 	return c.json({ id: messageId, status: "sent" }, 202);
 });
 

@@ -130,13 +130,10 @@ export default function HomeRoute() {
 	};
 
 	const isConfigured = emailAddresses.length > 0;
-	const accounts = isConfigured
-		? emailAddresses.map((addr) => ({
-				id: addr,
-				email: addr,
-				name: addr.split("@")[0] || addr,
-			}))
-		: mailboxes;
+	const accounts = [...mailboxes].sort((a, b) => {
+		const ai = emailAddresses.indexOf(a.email), bi = emailAddresses.indexOf(b.email);
+		return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+	}).map(m => ({ ...m, name: m.email.split("@")[0] }));
 
 	const isLoading = !configData;
 
@@ -147,13 +144,13 @@ export default function HomeRoute() {
 				<div className="mb-8">
 					<div className="flex items-center justify-between">
 						<h1 className="text-2xl font-bold text-kumo-default">Mailboxes</h1>
-						{!isConfigured && (
+						{domains.length > 0 && (
 							<Button
 								variant="primary"
 								icon={<PlusIcon size={16} />}
 								onClick={() => setIsCreateOpen(true)}
 							>
-								New Mailbox
+								메일함 추가
 							</Button>
 						)}
 					</div>
@@ -246,7 +243,7 @@ export default function HomeRoute() {
 			<Dialog.Root open={isCreateOpen} onOpenChange={setIsCreateOpen}>
 				<Dialog size="sm" className="p-6">
 					<Dialog.Title className="text-base font-semibold mb-5">
-						Create New Mailbox
+						Create 메일함 추가
 					</Dialog.Title>
 					<form onSubmit={handleCreate} className="space-y-4">
 						{createError && (

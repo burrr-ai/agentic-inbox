@@ -23,7 +23,7 @@ describe("Discord new-mail notifications", () => {
 		const [url, init] = fetchMock.mock.calls[0].arguments;
 		assert.equal(url, `${webhook}?wait=true`);
 		assert.equal(init.method, "POST");
-		assert.equal(init.redirect, "error");
+		assert.equal(init.redirect, "manual");
 		assert.ok(init.signal instanceof AbortSignal);
 		assert.deepEqual(JSON.parse(init.body), {
 			content: "New mail: inbox@example.com", allowed_mentions: { parse: [] }, flags: 4,

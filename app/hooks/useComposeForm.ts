@@ -15,7 +15,7 @@ import {
 	toEmailListValue,
 } from "~/lib/utils";
 import { useDeleteEmail, useForwardEmail, useReplyToEmail, useSaveDraft, useSendEmail } from "~/queries/emails";
-import { useMailbox } from "~/queries/mailboxes";
+import { useMailbox, useMailboxes } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
 
 function appendUniqueAddress(
@@ -166,6 +166,9 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const toastManager = useKumoToastManager();
 	const { composeOptions, closePanel, closeCompose } = useUIStore();
 	const { data: currentMailbox } = useMailbox(mailboxId);
+	const { data: senderMailboxes = [] } = useMailboxes();
+	const [fromAddress, setFromAddress] = useState(mailboxId || "");
+	const [files, setFiles] = useState<File[]>([]);
 	const sendEmailMutation = useSendEmail();
 	const saveDraftMutation = useSaveDraft();
 	const replyMutation = useReplyToEmail();
@@ -201,6 +204,8 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			sigBlock,
 		);
 		setError(null);
+		setFromAddress(mailboxId || "");
+		setFiles([]);
 		setTo(initialFields.to);
 		setCc(initialFields.cc);
 		setBcc(initialFields.bcc);
@@ -210,7 +215,9 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	}, [composeOptions, currentMailbox?.email, sigBlock]);
 
 	const handleSaveDraft = async () => {
-		if (!mailboxId || isSending) return; setIsSavingDraft(true); setError(null);
+		if (!mailboxId || isSending) return;
+		if (files.length) { setError("첨부파일은 임시 저장되지 않습니다. 첨부를 제거하거나 바로 보내주세요."); return; }
+		setIsSavingDraft(true); setError(null);
 		try {
 			await saveDraftMutation.mutateAsync({ mailboxId, draft: {
 				to,
@@ -238,8 +245,9 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		const toRecipients = splitEmailList(to);
 		if (toRecipients.length === 0) { setError("Add at least one recipient."); return; }
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
-		const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
-		const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
+		if (!senderMailboxes.some(m => m.email === fromAddress)) { setError("발신 메일함을 선택해주세요."); return; }
+		if (files.length > 10 || files.reduce((sum, file) => sum + file.size, 0) > 3 * 1024 * 1024) { setError("첨부는 최대 10개, 합계 3MB까지 가능합니다."); return; }
+		const from = fromAddress;
 		const emailData = {
 			to: toEmailListValue(toRecipients),
 			cc: toEmailListValue(ccRecipients),
@@ -252,9 +260,16 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		const draftId = composeOptions.draftEmail?.id; const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
 		setIsSending(true); toastManager.add({ title: "Sending email..." });
 		try {
-			if ((mode === "reply" || mode === "reply-all") && originalId) await replyMutation.mutateAsync({ mailboxId, emailId: originalId, email: emailData });
-			else if (mode === "forward" && originalId) await forwardMutation.mutateAsync({ mailboxId, emailId: originalId, email: emailData });
-			else await sendEmailMutation.mutateAsync({ mailboxId, email: emailData });
+			const attachments = await Promise.all(files.map(file => new Promise<{ content: string; filename: string; type: string; disposition: "attachment" }>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onerror = () => reject(new Error("첨부파일을 읽지 못했습니다."));
+				reader.onload = () => resolve({ content: String(reader.result).split(",")[1], filename: file.name, type: file.type || "application/octet-stream", disposition: "attachment" });
+				reader.readAsDataURL(file);
+			})));
+			const outgoing = { ...emailData, attachments };
+			if ((mode === "reply" || mode === "reply-all") && originalId) await replyMutation.mutateAsync({ mailboxId, emailId: originalId, email: outgoing });
+			else if (mode === "forward" && originalId) await forwardMutation.mutateAsync({ mailboxId, emailId: originalId, email: outgoing });
+			else await sendEmailMutation.mutateAsync({ mailboxId: fromAddress, email: outgoing });
 			if (draftId) deleteEmailMutation.mutate({ mailboxId, id: draftId });
 			toastManager.add({ title: "Email sent!" });
 			onClose();
@@ -262,5 +277,5 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSending(false); }
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
+	return { fromAddress, setFromAddress, senderMailboxes, files, setFiles, to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
 }

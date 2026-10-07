@@ -37,9 +37,11 @@ export async function handleReplyEmail(c: AppContext) {
 	const originalEmail = await resolveOriginalEmail(stub, rawOriginal);
 	const { originalMsgId, references, threadId: thread_id } = buildReferencesChain(originalEmail);
 
+	const selectedSender = (typeof from === "string" ? from : from.email).toLowerCase();
+	if (!(await c.env.BUCKET.head(`mailboxes/${selectedSender}.json`))) return c.json({ error: "발신 메일함이 존재하지 않습니다." }, 400);
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
-		({ toStr, fromEmail, fromDomain } = validateSender(to, from, mailboxId));
+		({ toStr, fromEmail, fromDomain } = validateSender(to, from, selectedSender));
 	} catch (e) {
 		if (e instanceof SenderValidationError) return c.json({ error: e.message }, 400);
 		throw e;
@@ -51,6 +53,29 @@ export async function handleReplyEmail(c: AppContext) {
 		.checkSendRateLimit();
 	if (rateLimitError) {
 		return c.json({ error: rateLimitError }, 429);
+	}
+
+	try {
+		await sendEmail(c.env.EMAIL, {
+			to,
+			cc,
+			bcc,
+			from,
+			subject,
+			html,
+			text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+			headers: buildThreadingHeaders(originalMsgId, references),
+		});
+	} catch {
+		console.error("Outbound provider rejected the message");
+		return c.json({ error: "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요." }, 502);
 	}
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
@@ -87,27 +112,6 @@ export async function handleReplyEmail(c: AppContext) {
 
 	await stub.markThreadRead(thread_id);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-			headers: buildThreadingHeaders(originalMsgId, references),
-		}).catch((e) => {
-			console.error("Deferred reply delivery failed:", (e as Error).message);
-		}),
-	);
 
 	return c.json({ id: messageId, status: "sent" }, 202);
 }
@@ -127,9 +131,11 @@ export async function handleForwardEmail(c: AppContext) {
 
 	await resolveOriginalEmail(stub, rawOriginal);
 
+	const selectedSender = (typeof from === "string" ? from : from.email).toLowerCase();
+	if (!(await c.env.BUCKET.head(`mailboxes/${selectedSender}.json`))) return c.json({ error: "발신 메일함이 존재하지 않습니다." }, 400);
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
-		({ toStr, fromEmail, fromDomain } = validateSender(to, from, mailboxId));
+		({ toStr, fromEmail, fromDomain } = validateSender(to, from, selectedSender));
 	} catch (e) {
 		if (e instanceof SenderValidationError) return c.json({ error: e.message }, 400);
 		throw e;
@@ -141,6 +147,28 @@ export async function handleForwardEmail(c: AppContext) {
 		.checkSendRateLimit();
 	if (rateLimitError) {
 		return c.json({ error: rateLimitError }, 429);
+	}
+
+	try {
+		await sendEmail(c.env.EMAIL, {
+			to,
+			cc,
+			bcc,
+			from,
+			subject,
+			html,
+			text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+		});
+	} catch {
+		console.error("Outbound provider rejected the message");
+		return c.json({ error: "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요." }, 502);
 	}
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
@@ -173,26 +201,6 @@ export async function handleForwardEmail(c: AppContext) {
 		attachmentData,
 	);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-		}).catch((e) => {
-			console.error("Deferred forward delivery failed:", (e as Error).message);
-		}),
-	);
 
 	return c.json({ id: messageId, status: "sent" }, 202);
 }

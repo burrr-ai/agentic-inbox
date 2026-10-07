@@ -7,6 +7,7 @@ import { FloppyDiskIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
+import ComposeExtras from "./ComposeExtras";
 import { useUIStore } from "~/hooks/useUIStore";
 
 export default function ComposeEmail() {
@@ -18,6 +19,7 @@ export default function ComposeEmail() {
 	const { isComposeModalOpen, closeComposeModal } = useUIStore();
 
 	const {
+		fromAddress, setFromAddress, senderMailboxes, files, setFiles,
 		to,
 		setTo,
 		cc,
@@ -49,6 +51,7 @@ export default function ComposeEmail() {
 				</Dialog.Title>
 				<form onSubmit={(e) => handleSend(e, closeComposeModal)} className="space-y-4">
 					{error && <Banner variant="error" text={error} />}
+					<ComposeExtras from={fromAddress} onFromChange={setFromAddress} mailboxes={senderMailboxes} files={files} onFilesChange={setFiles} disabled={isSending} />
 					<div className="flex items-center gap-2">
 						<div className="flex-1">
 							<Input
