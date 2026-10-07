@@ -21,7 +21,8 @@
 			"tech@clovair.dev": "gjwnsan9420@gmail.com",
 			"admin@clovair.dev": "gjwnsan9420@gmail.com"
 		},
-		"EMAIL_ADDRESSES": ["ggm@clovair.dev", "payments@clovair.dev", "tech@clovair.dev", "admin@clovair.dev"],
+		"EMAIL_ADDRESSES": ["ggm@clovair.dev", "payments@clovair.dev", "tech@clovair.dev", "admin@clovair.dev", "etc@clovair.dev"],
+		"CATCH_ALL_MAILBOX": "etc@clovair.dev",
 		"AUTO_DRAFT_ENABLED": false
 	},
 	"d1_databases": [{

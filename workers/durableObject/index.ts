@@ -76,6 +76,7 @@ interface EmailData {
 	subject: string;
 	sender: string;
 	recipient: string;
+	envelope_recipient?: string | null;
 	cc?: string | null;
 	bcc?: string | null;
 	date: string;
@@ -151,6 +152,7 @@ export class MailboxDO extends DurableObject<Env> {
 				subject: schema.emails.subject,
 				sender: schema.emails.sender,
 				recipient: schema.emails.recipient,
+				envelope_recipient: schema.emails.envelope_recipient,
 				cc: schema.emails.cc,
 				bcc: schema.emails.bcc,
 				date: schema.emails.date,
@@ -851,6 +853,7 @@ export class MailboxDO extends DurableObject<Env> {
 				subject: email.subject,
 				sender: email.sender,
 				recipient: email.recipient,
+				envelope_recipient: email.envelope_recipient ?? null,
 				cc: email.cc ?? null,
 				bcc: email.bcc ?? null,
 				date: email.date,

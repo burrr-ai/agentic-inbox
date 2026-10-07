@@ -13,7 +13,7 @@
 
 ## Mail routing: current and proposed
 
-Existing production rules forward `ggm`, `payments`, `tech`, and `admin` at `clovair.dev` to `gjwnsan9420@gmail.com`. Keep those rules and MX intact until cutover approval. Catch-all stays disabled.
+On 2026-10-08 KST, after explicit approval, only `ggm@clovair.dev` was changed from direct Gmail forwarding to Worker `agentic-inbox` (rule `1332fd772bd8402782d3fa7d8380dd76`). The Worker saves the message and forwards it to `gjwnsan9420@gmail.com`. `payments`, `tech`, and `admin` still forward directly to Gmail. MX is unchanged and catch-all stays disabled. The ggm mailbox registry was checked in R2 before this change. External delivery verification is pending the user's fresh test message.
 
 The Worker now stores each message using Cloudflare's actual SMTP envelope recipient (`event.to`), not the visible MIME To header. BCC-only and forwarded messages therefore do not select an unrelated mailbox. Addresses are case normalized, but plus tags are not merged and arbitrary aliases are not invented. Only the four configured addresses are enabled. Unprovisioned allowed mailboxes cause a delivery error instead of silent loss.
 
@@ -28,7 +28,7 @@ Before cutover:
 5. Show a diff of all four individual rules: **forward to Gmail → send to agentic-inbox Worker**. Individual rules take precedence over catch-all. Obtain approval, then change only those four actions. No MX change is expected when retaining Cloudflare Email Routing.
 6. Roll back by restoring the four Gmail-forward actions. Leave app data intact.
 
-Catch-all requires a separately approved design: exact registered recipients go to their mailboxes, unknown recipients go to a dedicated shared catch-all mailbox. This is not enabled or implemented in this deployment.
+Catch-all requires a separately approved design: exact registered recipients go to their mailboxes, unknown recipients go to a dedicated shared catch-all mailbox. The fallback is implemented using CATCH_ALL_MAILBOX=etc@clovair.dev, with the SMTP envelope recipient stored separately from MIME To and displayed in the message. Unknown addresses in DOMAINS go to etc; provisioned addresses keep their mailbox. Missing configured mailboxes fail instead of silently misfiling mail. Catch-all routing remains disabled pending explicit approval. Unknown addresses do not forward to Gmail.
 
 ## Backup and recovery
 
@@ -60,3 +60,6 @@ Restore the mailbox registry and referenced attachments at a compatible snapshot
 References:
 - https://developers.cloudflare.com/d1/reference/time-travel/
 - https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/
+
+
+2026-10-08 reception investigation: ggm inbox API returned HTTP 200 with totalCount 0. The Naver test at 02:51:53 KST is recorded as a forwarding action in Email Routing; the Worker email-event log query returned zero events. A fresh test is pending to distinguish routing propagation from worker delivery. DISCORD_WEBHOOK_URL has now been registered as a Worker secret.

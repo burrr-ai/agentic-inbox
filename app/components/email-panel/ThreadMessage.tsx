@@ -123,6 +123,7 @@ export default function ThreadMessage({
 								{isDraft && <Badge variant="outline">Draft</Badge>}
 							</div>
 							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
+							{email.envelope_recipient && <div className="text-xs text-kumo-subtle">실제 수신 주소: {email.envelope_recipient}</div>}
 						</div>
 					</div>
 					<div className="flex items-center gap-1 shrink-0">

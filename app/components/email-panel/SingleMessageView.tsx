@@ -31,6 +31,7 @@ export default function SingleMessageView({
 								{email.sender}
 							</div>
 							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
+							{email.envelope_recipient && <div className="text-xs text-kumo-subtle">실제 수신 주소: {email.envelope_recipient}</div>}
 						</div>
 					</div>
 					<span className="text-xs text-kumo-subtle shrink-0">

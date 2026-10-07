@@ -119,4 +119,38 @@ describe("incoming mail behavior", () => {
 		await s.receive(); await Promise.all(s.tasks);
 		assert.equal(s.mailbox.createEmail.mock.callCount(), 1); assert.equal(fetchMock.mock.callCount(), 1);
 	});
+	for (const withTo of [true, false]) {
+		it(`stores unregistered envelope recipients in etc (MIME To: ${withTo})`, async () => {
+			const s = setup({ DOMAINS: "clovair.dev", CATCH_ALL_MAILBOX: "etc@clovair.dev", EMAIL_ADDRESSES: ["ggm@clovair.dev", "etc@clovair.dev"] });
+			s.env.BUCKET.head.mock.mockImplementation(async (key) => key === "mailboxes/etc@clovair.dev.json" ? {} : null);
+			await receiveEmail(mailEvent("asdas@clovair.dev", withTo), s.env as unknown as Env, s.ctx as unknown as ExecutionContext);
+			await Promise.all(s.tasks);
+			assert.equal(s.env.MAILBOX.idFromName.mock.calls[0].arguments[0], "etc@clovair.dev");
+			assert.equal(s.mailbox.createEmail.mock.calls[0].arguments[1].envelope_recipient, "asdas@clovair.dev");
+			assert.equal(JSON.parse(fetchMock.mock.calls[0].arguments[1].body).content, "New mail: etc@clovair.dev");
+		});
+	}
+	it("keeps a provisioned alias in its own mailbox", async () => {
+		const s = setup({ DOMAINS: "clovair.dev", CATCH_ALL_MAILBOX: "etc@clovair.dev", EMAIL_ADDRESSES: ["ggm@clovair.dev"] });
+		await s.receive("alias@clovair.dev"); await Promise.all(s.tasks);
+		assert.equal(s.env.MAILBOX.idFromName.mock.calls[0].arguments[0], "alias@clovair.dev");
+	});
+	it("does not catch mail for another domain", async () => {
+		const s = setup({ DOMAINS: "clovair.dev", CATCH_ALL_MAILBOX: "etc@clovair.dev", EMAIL_ADDRESSES: ["ggm@clovair.dev"] });
+		await s.receive("unknown@example.org");
+		assert.equal(s.mailbox.createEmail.mock.callCount(), 0);
+	});
+	it("fails if a configured mailbox is missing instead of misfiling into etc", async () => {
+		const s = setup({ DOMAINS: "clovair.dev", CATCH_ALL_MAILBOX: "etc@clovair.dev", EMAIL_ADDRESSES: ["ggm@clovair.dev"] });
+		s.env.BUCKET.head.mock.mockImplementation(async () => null);
+		await assert.rejects(s.receive("ggm@clovair.dev"), /not provisioned/);
+		assert.equal(s.mailbox.createEmail.mock.callCount(), 0);
+	});
+	it("fails if etc has not been provisioned", async () => {
+		const s = setup({ DOMAINS: "clovair.dev", CATCH_ALL_MAILBOX: "etc@clovair.dev", EMAIL_ADDRESSES: ["ggm@clovair.dev"] });
+		s.env.BUCKET.head.mock.mockImplementation(async () => null);
+		await assert.rejects(s.receive("asdas@clovair.dev"), /not provisioned/);
+		assert.equal(fetchMock.mock.callCount(), 0);
+	});
+
 });

@@ -360,8 +360,15 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number; to: s
 
 	// SMTP envelope recipient is authoritative, including BCC and forwarded mail.
 	const envelopeRecipient = event.to.trim().toLowerCase();
-	const mailboxId = envelopeRecipient;
-	if (allowedAddresses.length > 0 && !allowedAddresses.includes(mailboxId)) return;
+	let mailboxId = envelopeRecipient;
+	const fallback = env.CATCH_ALL_MAILBOX?.trim().toLowerCase();
+	const domains = (env.DOMAINS || "").split(",").map((domain) => domain.trim().toLowerCase());
+	const registered = allowedAddresses.includes(envelopeRecipient);
+	if (fallback && !registered) {
+		if (!domains.includes(envelopeRecipient.split("@")[1])) return;
+		// A provisioned mailbox takes precedence; otherwise retain mail in etc.
+		if (!(await env.BUCKET.head(`mailboxes/${envelopeRecipient}.json`))) mailboxId = fallback;
+	} else if (allowedAddresses.length > 0 && !registered) return;
 	const messageId = crypto.randomUUID();
 	if (!(await env.BUCKET.head(`mailboxes/${mailboxId}.json`))) {
 		throw new Error("Recipient mailbox is not provisioned");
@@ -396,6 +403,7 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number; to: s
 	await stub.createEmail(Folders.INBOX, {
 		id: messageId, subject: parsedEmail.subject || "",
 		sender: (parsedEmail.from?.address || "").toLowerCase(), recipient: allRecipients.join(", "),
+		envelope_recipient: envelopeRecipient,
 		cc: ccRecipients.join(", ") || null, bcc: bccRecipients.join(", ") || null,
 		date: new Date().toISOString(), // uses receive time, not the email's Date header
 		body: parsedEmail.html || parsedEmail.text || "",
