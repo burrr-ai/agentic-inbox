@@ -17,7 +17,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 	const mailbox = { findThreadByMessageIds: mock.fn(async () => null), findThreadBySubject: mock.fn(async () => null), createEmail: mock.fn(async () => {}) };
 	const agent = { fetch: mock.fn(async () => new Response("{}")) };
 	const env = {
-		BUCKET: { head: mock.fn(async () => ({})), put: mock.fn() },
+		BUCKET: { get: mock.fn(async () => null), head: mock.fn(async () => ({})), put: mock.fn() },
 		MAILBOX: { idFromName: mock.fn((id) => id), get: mock.fn(() => mailbox) },
 		EMAIL_AGENT: { idFromName: mock.fn((id) => id), get: mock.fn(() => agent) },
 		EMAIL_ADDRESSES: [], DISCORD_WEBHOOK_URL: webhook, ...overrides,
@@ -42,6 +42,13 @@ describe("incoming mail behavior", () => {
 		await receiveEmail({ to: "inbox@example.com", raw: new Blob([raw]).stream(), rawSize: raw.length } as any, s.env as any, s.ctx as any);
 		await Promise.all(s.tasks);
 		assert.equal(s.mailbox.createEmail.mock.calls[0].arguments[1].thread_id, "existing-conversation");
+	});
+	it("excluded subjects still save mail while suppressing only Discord", async () => {
+		const s = setup();
+		s.env.BUCKET.get.mock.mockImplementation(async () => ({ json: async () => ({discordSubjectExclusions:["confidential"]}) }));
+		await s.receive(); await Promise.all(s.tasks);
+		assert.equal(s.mailbox.createEmail.mock.callCount(), 1);
+		assert.equal(fetchMock.mock.callCount(), 0);
 	});
 	for (const flag of [undefined, false, "false"]) {
 		it(`stores mail without contacting AI when flag is ${JSON.stringify(flag)}`, async () => {

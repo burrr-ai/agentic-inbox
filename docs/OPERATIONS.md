@@ -64,3 +64,9 @@ Deployment 03edac7f-0718-4426-96cd-f20b12833c20 contains recipient migration, sn
 Round-trip Naver replies revealed a pre-existing threading bug: incoming References/Message-ID strings were used directly as internal conversation IDs. Inbound delivery now resolves these IDs to the existing stored thread. Migration 11 reconnects existing split conversations whose thread ID matches an original Message-ID. Sent messages using a different selected sender are excluded when choosing the latest incoming message for another reply.
 
 Final deployed code commit: e69ba9c8f166908e496626cd96c7f44044504b07; Cloudflare version: 283e7f50-6b9a-4261-808b-0be237555e79. After deployment, the original Naver message, outgoing etc reply and returning Naver reply appeared together as one three-message conversation.
+
+## Per-mailbox Discord subject exclusions (2026-10-09)
+
+Mailbox Settings → 디스코드 알림 필터 stores `discordSubjectExclusions` in that mailbox's existing R2 settings. Enter one literal title substring per line (up to 100 keywords, 200 characters each). Matching ignores English case and normalizes Unicode; any match suppresses only Discord. Bodies are not matched. Empty lists notify for every received message. Other mailbox rules remain independent; etc rules cover mail stored in etc. Existing messages are not replayed. Settings read/validation failures log a generic warning and fall back to notifying. Mail storage, Gmail forwarding, and AI settings are unaffected.
+
+The requested admin@clovair.dev rule is `자금일보`; other addresses retain their existing rules. Validation includes per-mailbox isolation, body-only nonmatches, literal matching, clearing, and continued inbox storage for excluded messages.

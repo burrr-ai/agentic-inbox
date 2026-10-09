@@ -23,7 +23,8 @@ import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
 import { createAuth } from "./lib/auth";
 import { isAutoDraftEnabled } from "./lib/inbound-options";
-import { notifyDiscordNewMail } from "./lib/discord";
+import { MailboxSettingsSchema } from "../shared/discord-filters";
+import { notifyDiscordForMailbox } from "./lib/discord";
 
 type AppContext = Context<MailboxContext>;
 
@@ -32,7 +33,7 @@ type AppContext = Context<MailboxContext>;
 const CreateMailboxBody = z.object({
 	email: z.string().email(),
 	name: z.string().min(1),
-	settings: z.record(z.any()).optional(), // unvalidated — agentSystemPrompt goes straight to AI
+	settings: MailboxSettingsSchema.optional(),
 });
 
 const DraftBody = z.object({
@@ -133,7 +134,7 @@ app.get("/api/v1/mailboxes/:mailboxId", async (c) => {
 
 app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
 	const mailboxId = c.req.param("mailboxId")!;
-	const { settings } = (await c.req.json()) as { settings: Record<string, unknown> };
+	const { settings } = z.object({ settings: MailboxSettingsSchema }).parse(await c.req.json());
 	const key = `mailboxes/${mailboxId}.json`;
 	if (!(await c.env.BUCKET.head(key))) return c.json({ error: "Not found" }, 404);
 	await c.env.BUCKET.put(key, JSON.stringify(settings));
@@ -454,7 +455,7 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number; to: s
 
 	// Only notify once the incoming message is safely stored. Keep this independent
 	// of AI processing and outside the delivery path so Discord cannot block mail.
-	ctx.waitUntil(notifyDiscordNewMail(env, mailboxId, {
+	ctx.waitUntil(notifyDiscordForMailbox(env, mailboxId, {
 		subject: parsedEmail.subject || "",
 		text: parsedEmail.text || stripHtmlToText(parsedEmail.html || ""),
 	}));

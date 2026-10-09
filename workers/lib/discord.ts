@@ -1,3 +1,4 @@
+import { MailboxSettingsSchema, excludesDiscordSubject } from "../../shared/discord-filters";
 // Copyright (c) 2026 Cloudflare, Inc.
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
@@ -95,4 +96,22 @@ export async function notifyDiscordNewMail(
 	} finally {
 		clearTimeout(timeout);
 	}
+}
+
+/** Read mailbox-specific policy after storage, isolated from delivery/forwarding. */
+export async function notifyDiscordForMailbox(
+	env: { DISCORD_WEBHOOK_URL?: string; BETTER_AUTH_URL?: string; BUCKET: R2Bucket },
+	mailboxAddress: string,
+	preview: { subject: string; text: string },
+): Promise<void> {
+	if (!env.DISCORD_WEBHOOK_URL) return;
+	try {
+		const obj = await env.BUCKET.get(`mailboxes/${mailboxAddress}.json`);
+		const settings = MailboxSettingsSchema.parse(obj ? await obj.json() : {});
+		if (excludesDiscordSubject(preview.subject, settings.discordSubjectExclusions || [])) return;
+	} catch {
+		// A settings outage must not silently suppress every notification.
+		console.warn("Discord mailbox filter unavailable; sending notification");
+	}
+	await notifyDiscordNewMail(env, mailboxAddress, preview);
 }
