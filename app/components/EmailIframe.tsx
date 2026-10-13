@@ -62,9 +62,18 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		const cleanBody = DOMPurify.sanitize(body, {
 			USE_PROFILES: { html: true },
 			FORBID_TAGS: ["style"],
-			ADD_ATTR: ["target"],
+			RETURN_DOM_FRAGMENT: true,
 			FORCE_BODY: true,
 		});
+
+		// Override sender-supplied targets, including _self/_top and named frames.
+		// New tabs must not retain access to the webmail window or its referrer.
+		for (const link of cleanBody.querySelectorAll("a[href], area[href]")) {
+			link.setAttribute("target", "_blank");
+			link.setAttribute("rel", "noopener noreferrer");
+		}
+		const container = document.createElement("div");
+		container.appendChild(cleanBody);
 
 		const padding = autoSize ? "0" : "24px";
 
@@ -135,7 +144,7 @@ h1, h2, h3 { margin: 8px 0 4px; }
 ul, ol { padding-left: 20px; margin: 4px 0; }
 </style>
 </head>
-<body>${cleanBody}${heightScript}</body>
+<body>${container.innerHTML}${heightScript}</body>
 </html>`;
 	}, [body, autoSize]);
 
@@ -144,7 +153,7 @@ ul, ol { padding-left: 20px; margin: 4px 0; }
 			ref={iframeRef}
 			className="block w-full border-0"
 			style={autoSize ? { height: `${height}px` } : { height: "100%" }}
-			sandbox="allow-scripts allow-popups allow-top-navigation-by-user-activation"
+			sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
 			title="Email content"
 		/>
 	);
