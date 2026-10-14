@@ -39,7 +39,9 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
 	const editor = useEditor({
 		extensions: [
-			StarterKit,
+			StarterKit.configure({
+				blockquote: { HTMLAttributes: { style: "border-left: 2px solid #ccc; margin: 16px 0; padding-left: 16px;" } },
+			}),
 			Underline,
 			TextAlign.configure({ types: ["heading", "paragraph"] }),
 			LinkExtension.configure({ openOnClick: false }),

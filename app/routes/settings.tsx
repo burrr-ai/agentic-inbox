@@ -2,16 +2,11 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
-import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { DiscordSubjectExclusions, parseSubjectExclusions } from "shared/discord-filters";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
-
-// Placeholder shown in the textarea when no custom prompt is set.
-// The authoritative default prompt lives in workers/agent/index.ts (DEFAULT_SYSTEM_PROMPT).
-const PROMPT_PLACEHOLDER = `You are an email assistant that helps manage this inbox. You read emails, draft replies, and help organize conversations.\n\nWrite like a real person. Short, direct, flowing prose. Plain text only.\n\n(Leave empty to use the full built-in default prompt)`;
 
 export default function SettingsRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
@@ -20,14 +15,12 @@ export default function SettingsRoute() {
 	const updateMailboxMutation = useUpdateMailbox();
 
 	const [displayName, setDisplayName] = useState("");
-	const [agentPrompt, setAgentPrompt] = useState("");
 	const [discordKeywords, setDiscordKeywords] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 
 	useEffect(() => {
 		if (mailbox) {
 			setDisplayName(mailbox.settings?.fromName || mailbox.name || "");
-			setAgentPrompt(mailbox.settings?.agentSystemPrompt || "");
 			setDiscordKeywords((mailbox.settings?.discordSubjectExclusions || []).join("\n"));
 		}
 	}, [mailbox]);
@@ -44,7 +37,6 @@ export default function SettingsRoute() {
 			...mailbox.settings,
 			fromName: displayName,
 			discordSubjectExclusions: exclusions.data,
-			agentSystemPrompt: agentPrompt.trim() || undefined,
 		};
 		try {
 			await updateMailboxMutation.mutateAsync({ mailboxId, settings });
@@ -59,10 +51,6 @@ export default function SettingsRoute() {
 		}
 	};
 
-	const handleResetPrompt = () => {
-		setAgentPrompt("");
-	};
-
 	if (!mailbox) {
 		return (
 			<div className="flex justify-center py-20">
@@ -71,7 +59,6 @@ export default function SettingsRoute() {
 		);
 	}
 
-	const isCustomPrompt = agentPrompt.trim().length > 0;
 
 	return (
 		<div className="max-w-2xl px-4 py-4 md:px-8 md:py-6 h-full overflow-y-auto">
@@ -100,48 +87,6 @@ export default function SettingsRoute() {
 					<textarea id="discord-keywords" value={discordKeywords} onChange={e => setDiscordKeywords(e.target.value)} rows={5} placeholder={"자금일보\n광고"} className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-sm text-kumo-default focus:outline-none focus:ring-1 focus:ring-kumo-ring" />
 					<p className="text-xs text-kumo-subtle mt-2">한 줄에 하나씩 입력하세요. 영문 대소문자는 구분하지 않으며, 입력한 문구 그대로 포함 여부를 확인합니다. 모두 지우고 저장하면 모든 수신 메일의 알림을 받습니다.</p>
 				</section>
-
-				{/* Agent System Prompt */}
-				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
-					<div className="flex items-center justify-between mb-4">
-						<div className="flex items-center gap-2">
-							<RobotIcon size={16} weight="duotone" className="text-kumo-subtle" />
-							<span className="text-sm font-medium text-kumo-default">
-								AI Agent Prompt
-							</span>
-							{isCustomPrompt ? (
-								<Badge variant="primary">Custom</Badge>
-							) : (
-								<Badge variant="secondary">Default</Badge>
-							)}
-						</div>
-						{isCustomPrompt && (
-							<Button
-								variant="ghost"
-								size="xs"
-								icon={<ArrowCounterClockwiseIcon size={14} />}
-								onClick={handleResetPrompt}
-							>
-								Reset to default
-							</Button>
-						)}
-					</div>
-					<p className="text-xs text-kumo-subtle mb-3">
-						Customize how the AI agent behaves for this mailbox.
-						Leave empty to use the built-in default prompt.
-					</p>
-					<textarea
-						value={agentPrompt}
-						onChange={(e) => setAgentPrompt(e.target.value)}
-						placeholder={PROMPT_PLACEHOLDER}
-						rows={12}
-						className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-xs text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring font-mono leading-relaxed"
-					/>
-					<p className="text-xs text-kumo-subtle mt-2">
-						The prompt is sent as the system message to the AI model.
-						It controls the agent's personality, writing style, and behavior rules.
-					</p>
-				</div>
 
 				{/* Save */}
 				<div className="flex justify-end">

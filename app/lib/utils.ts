@@ -9,6 +9,7 @@
  * Re-export for backwards compatibility with existing imports.
  */
 import DOMPurify from "dompurify";
+import { prepareQuotedHtml } from "./quoted-html";
 import { formatQuotedDate } from "shared/dates";
 import type { Attachment } from "~/types";
 
@@ -162,13 +163,8 @@ export function buildQuotedReplyBlock(
 	// HTML-escape sender to prevent <john@example.com> from disappearing as a tag
 	const escapedSender = escapeHtml(sender);
 
-	// Sanitize the body to plain text to prevent stored XSS.
-	// The original HTML renders safely in the sandboxed iframe, but quoted
-	// reply blocks are injected into the compose editor where raw HTML would
-	// execute. Convert to escaped plain text instead.
-	const bodyToQuote = escapeHtml(stripHtml(body)).replace(/\n/g, "<br>");
-
-	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${formattedDate}, ${escapedSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
+	const bodyToQuote = prepareQuotedHtml(body);
+	return `<blockquote><p>On ${formattedDate}, ${escapedSender} wrote:</p>${bodyToQuote}</blockquote>`;
 }
 
 /**
