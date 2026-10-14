@@ -364,9 +364,10 @@ export class MailboxDO extends DurableObject<Env> {
 				WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
 			),
 			thread_to_conversation AS (
-				SELECT
+				-- A thread can contain multiple subjects. Keep one mapping per
+				-- thread so joining it cannot multiply messages and unread counts.
+				SELECT DISTINCT
 					raw_thread_id,
-					normalized_subject,
 					CASE
 						WHEN thread_id IS NOT NULL THEN raw_thread_id
 						ELSE MIN(raw_thread_id) OVER (PARTITION BY normalized_subject)
